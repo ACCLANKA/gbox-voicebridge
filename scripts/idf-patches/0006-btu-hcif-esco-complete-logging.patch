@@ -1,0 +1,71 @@
+diff --git a/components/bt/host/bluedroid/stack/btu/btu_hcif.c b/components/bt/host/bluedroid/stack/btu/btu_hcif.c
+index 30e76125..94a44ed2 100644
+--- a/components/bt/host/bluedroid/stack/btu/btu_hcif.c
++++ b/components/bt/host/bluedroid/stack/btu/btu_hcif.c
+@@ -674,6 +674,10 @@ static void btu_hcif_connection_request_evt (UINT8 *p)
+     STREAM_TO_BDADDR   (bda, p);
+     STREAM_TO_DEVCLASS (dc, p);
+     STREAM_TO_UINT8    (link_type, p);
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    HCI_TRACE_WARNING("VB_HF: CONNECTION_REQUEST bda=%02x:%02x:%02x:%02x:%02x:%02x link_type=%d (0=SCO,1=ACL,2=eSCO)",
++                      bda[0], bda[1], bda[2], bda[3], bda[4], bda[5], link_type);
++#endif
+     /* Pass request to security manager to check connect filters before */
+     /* passing request to l2cap */
+     if (link_type == HCI_LINK_TYPE_ACL) {
+@@ -898,6 +902,18 @@ static void btu_hcif_esco_connection_comp_evt (UINT8 *p)
+     STREAM_TO_UINT8 (data.air_mode, p);
+ 
+     memcpy (data.bd_addr, bda, BD_ADDR_LEN);
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    /* THE byte that has been missing from every capture so far. status 0 == the
++     * controller established the link; anything else is the refusal, and it arrives
++     * *after* BTM_CreateSco already returned BTM_CMD_STARTED, so nothing upstream
++     * could see it. air_mode 0 == u-law, 1 == A-law, 2 == CVSD, 3 == transparent
++     * (so the eSCO completion reporting air_mode=2 IS CVSD - an earlier version of this
++     * comment said "0 == CVSD" and that wrong label cost a whole triage round). */
++    HCI_TRACE_WARNING("VB_HF: ESCO_CONN_COMPLETE status=0x%02x handle=0x%04x bda=%02x:%02x:%02x:%02x:%02x:%02x link_type=%d tx_int=%d retrans_win=%d rx_pkt=%d tx_pkt=%d air_mode=%d (air_mode 0=u-law, 1=A-law, 2=CVSD, 3=transparent)",
++                      status, handle, bda[0], bda[1], bda[2], bda[3], bda[4], bda[5],
++                      data.link_type, data.tx_interval, data.retrans_window,
++                      data.rx_pkt_len, data.tx_pkt_len, data.air_mode);
++#endif
+     btm_sco_connected (status, bda, handle, &data);
+ #endif
+ }
+@@ -1402,6 +1418,10 @@ static void btu_hcif_hdl_command_status (UINT16 opcode, UINT8 status, UINT8 *p_c
+                     if (btm_is_sco_active(handle)) {
+                         btm_esco_proc_conn_chg (status, handle, 0, 0, 0, 0);
+                     } else {
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++                        HCI_TRACE_WARNING("VB_HF: SETUP_ESCO command status=0x%02x handle=0x%04x (non-zero here = the command was rejected before any link came up)",
++                                          status, handle);
++#endif
+                         btm_sco_connected (status, NULL, handle, &esco_data);
+                     }
+                 }
+@@ -1446,6 +1466,25 @@ static void btu_hcif_command_status_evt_on_task(BT_HDR *event)
+     uint8_t *stream = hack->command->data + hack->command->offset;
+     STREAM_TO_UINT16(opcode, stream);
+ 
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    /* THE local-vs-peer discriminator for HCI_ERR_MAX_NUM_OF_SCOS (0x0A). That code is a
++     * shared space: the Sync Connection Complete can carry a local HCI error or a peer LMP
++     * error passed up verbatim, so 0x0A alone does not name its author. The command-status
++     * byte does:
++     *   status != 0 here -> our own controller refused BEFORE any LMP exchange (local).
++     *   status == 0 here -> the command went out over the air; a later 0x0A in event 0x2C
++     *                       then came back from the PEER.
++     * The timestamp gap to that 0x2C line is the second signal: a local bail is immediate,
++     * a peer rejection costs a full LMP round trip. */
++    if (opcode == HCI_SETUP_ESCO_CONNECTION) {
++        HCI_TRACE_WARNING("VB_HF: CMD_STATUS opcode=0x%04x status=0x%02x -> %s",
++                          opcode, hack->status,
++                          (hack->status == 0)
++                          ? "accepted locally, so any 0x0A later came from the PEER"
++                          : "LOCAL controller refused it before any LMP exchange");
++    }
++#endif
++
+     btu_hcif_hdl_command_status(
+         opcode,
+         hack->status,

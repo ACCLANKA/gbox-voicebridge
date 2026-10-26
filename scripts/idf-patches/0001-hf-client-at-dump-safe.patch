@@ -1,0 +1,62 @@
+diff --git a/components/bt/host/bluedroid/bta/hf_client/bta_hf_client_at.c b/components/bt/host/bluedroid/bta/hf_client/bta_hf_client_at.c
+index adf3d609..bcf56733 100644
+--- a/components/bt/host/bluedroid/bta/hf_client/bta_hf_client_at.c
++++ b/components/bt/host/bluedroid/bta/hf_client/bta_hf_client_at.c
+@@ -33,7 +33,13 @@
+ #define BTA_HF_CLIENT_AT_EVENT_MIN_LEN 3
+ 
+ /* timeout for AT response */
+-#define BTA_HF_CLIENT_AT_TIMEOUT 29989
++/* VB: upstream is 29989 ms (~30 s). A CPU-starved second (heap exhaustion, a log flood,
++ * an SCO burst) can make us miss a response the AG did send, and this timer then tears
++ * down the whole HFP link - after which an incoming call cannot be answered until the
++ * phone reconnects, because HF connection state is 0. Widened to 60 s for the bench so
++ * starvation cannot kill a live link. RESTORE 29989 before production: a real AG that
++ * does not answer should still be dropped promptly. */
++#define BTA_HF_CLIENT_AT_TIMEOUT 60000
+ 
+ /* timeout for AT hold timer */
+ #define BTA_HF_CLIENT_AT_HOLD_TIMEOUT 41
+@@ -180,7 +186,9 @@ static void bta_hf_client_send_at(tBTA_HF_CLIENT_AT_CMD cmd, char *buf, UINT16 b
+         UINT16  len;
+ 
+ #ifdef BTA_HF_CLIENT_AT_DUMP
+-        APPL_TRACE_DEBUG("%s %.*s", __FUNCTION__, buf_len - 1, buf);
++        if (buf_len > 0) {   /* buf_len - 1 underflows to 65535 and would over-read */
++            APPL_TRACE_DEBUG("%s %.*s", __FUNCTION__, buf_len - 1, buf);
++        }
+ #endif
+ 
+         bta_hf_client_cb.scb.at_cb.current_cmd = cmd;
+@@ -1226,20 +1234,27 @@ static const UINT16 bta_hf_client_psraser_cb_count =
+     sizeof(bta_hf_client_parser_cb) / sizeof(bta_hf_client_parser_cb[0]);
+ 
+ #ifdef BTA_HF_CLIENT_AT_DUMP
++/* Cap the dump and keep it off the stack. 4 * BTA_HF_CLIENT_AT_PARSER_MAX_LEN is
++ * 16385 bytes, and the task that parses AT has only ~4 KB of stack - that frame
++ * overflowed and panicked the board (fw 0.6.3, LoadProhibited). AT lines are short. */
++#define BTA_HF_CLIENT_AT_DUMP_MAX_LEN 256
+ static void bta_hf_client_dump_at(void)
+ {
+-    char dump[(4 * BTA_HF_CLIENT_AT_PARSER_MAX_LEN) + 1];
++    char dump[BTA_HF_CLIENT_AT_DUMP_MAX_LEN];
+     char *p1, *p2;
+ 
+     p1 = bta_hf_client_cb.scb.at_cb.buf;
+     p2 = dump;
+ 
+-    while (*p1 != '\0') {
++    while (*p1 != '\0' && p2 < dump + sizeof(dump) - 5) {
+         if (*p1 == '\r') {
+-            strlcpy(p2, "<cr>", 4);
++            /* memcpy, NOT strlcpy: strlcpy(p2,"<cr>",4) writes a NUL after "<cr"
++             * and p2 += 4 then steps past it, so the C string ended at the first
++             * CR and every incoming line printed as just "<cr". */
++            memcpy(p2, "<cr>", 4);
+             p2 += 4;
+         } else if (*p1 == '\n') {
+-            strlcpy(p2, "<lf>", 4);
++            memcpy(p2, "<lf>", 4);
+             p2 += 4;
+         } else {
+             *p2 = *p1;

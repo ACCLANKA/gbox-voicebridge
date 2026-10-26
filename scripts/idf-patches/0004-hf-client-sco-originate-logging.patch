@@ -1,0 +1,111 @@
+diff --git a/components/bt/host/bluedroid/bta/hf_client/bta_hf_client_sco.c b/components/bt/host/bluedroid/bta/hf_client/bta_hf_client_sco.c
+index d464a889..e0d15260 100644
+--- a/components/bt/host/bluedroid/bta/hf_client/bta_hf_client_sco.c
++++ b/components/bt/host/bluedroid/bta/hf_client/bta_hf_client_sco.c
+@@ -242,6 +242,10 @@ static void bta_hf_client_sco_conn_rsp(tBTM_ESCO_CONN_REQ_EVT_DATA *p_data)
+ #endif
+ 
+     APPL_TRACE_DEBUG("%s: negotiated codec = %d", __FUNCTION__, bta_hf_client_cb.scb.negotiated_codec);
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    APPL_TRACE_WARNING("VB_HF: conn_rsp building ACCEPT for INCOMING eSCO (sco_state=%d)",
++                       bta_hf_client_cb.scb.sco_state);
++#endif
+ 
+     if (bta_hf_client_cb.scb.sco_state == BTA_HF_CLIENT_SCO_LISTEN_ST) {
+         if (p_data->link_type == BTM_LINK_TYPE_SCO) {
+@@ -338,6 +342,14 @@ static void bta_hf_client_esco_connreq_cback(tBTM_ESCO_EVT event, tBTM_ESCO_EVT_
+         return;
+     }
+ 
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    /* The peer asked for the audio link. If this line appears in the same window as our
++     * own originate, then an AG-initiated eSCO is what holds the device-level SCO and our
++     * Setup Sync is the one that should be dropped, not this. */
++    APPL_TRACE_WARNING("VB_HF: INCOMING eSCO conn request sco_inx=%d link_type=%d -> we auto-ACCEPT (sco_conn_rsp)",
++                       (int)p_data->conn_evt.sco_inx, (int)p_data->conn_evt.link_type);
++#endif
++
+     /* TODO check remote bdaddr, should allow connect only from device with
+      * active SLC  */
+ 
+@@ -369,6 +381,20 @@ static void bta_hf_client_sco_conn_cback(UINT16 sco_idx)
+     rem_bd = BTM_ReadScoBdAddr(sco_idx);
+     BTM_ReadEScoLinkParms (sco_idx, &sco_data);
+ 
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    APPL_TRACE_WARNING("VB_HF: eSCO conn complete idx=%u air_mode=%d link_type=%d tx_pkt=%u rx_pkt=%u retrans_win=%u (air_mode 0=CVSD)",
++                       (unsigned)sco_idx, (int)sco_data.air_mode, (int)sco_data.link_type,
++                       (unsigned)sco_data.tx_pkt_len, (unsigned)sco_data.rx_pkt_len,
++                       (unsigned)sco_data.retrans_window);
++#endif
++
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    APPL_TRACE_WARNING("VB_HF: conn_cback idx=%u peer_bd_match=%d svc_conn=%d idx_match=%d (all three must be 1 or BTM_RemoveSco is called right here)",
++                       (unsigned)sco_idx,
++                       (rem_bd && bdcmp(bta_hf_client_cb.scb.peer_addr, rem_bd) == 0) ? 1 : 0,
++                       bta_hf_client_cb.scb.svc_conn ? 1 : 0,
++                       (bta_hf_client_cb.scb.sco_idx == sco_idx) ? 1 : 0);
++#endif
+     if (rem_bd && bdcmp(bta_hf_client_cb.scb.peer_addr, rem_bd) == 0 &&
+             bta_hf_client_cb.scb.svc_conn && bta_hf_client_cb.scb.sco_idx == sco_idx) {
+ 
+@@ -412,6 +438,12 @@ static void bta_hf_client_sco_disc_cback(UINT16 sco_idx)
+     BT_HDR  *p_buf;
+ 
+     APPL_TRACE_DEBUG("%s %d", __FUNCTION__, sco_idx);
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    /* Reads-and-clears the reason, but nothing else in this tree calls
++     * BTM_ReadScoDiscReason(), so this is the only consumer. */
++    APPL_TRACE_WARNING("VB_HF: disc_cback idx=%u disc_reason=0x%04x",
++                       (unsigned)sco_idx, (unsigned)BTM_ReadScoDiscReason());
++#endif
+ 
+     if (bta_hf_client_cb.scb.sco_idx == sco_idx) {
+ #if (BTM_SCO_HCI_INCLUDED == TRUE )
+@@ -509,6 +541,15 @@ static void bta_hf_client_sco_create(BOOLEAN is_orig)
+ 
+     p_bd_addr = bta_hf_client_cb.scb.peer_addr;
+ 
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    if (is_orig) {
++        APPL_TRACE_WARNING("VB_HF: ORIGINATING eSCO to %02x:%02x:%02x:%02x:%02x:%02x pkt_types=0x%04x retrans=%d max_lat=%d",
++                           bta_hf_client_cb.scb.peer_addr[0], bta_hf_client_cb.scb.peer_addr[1],
++                           bta_hf_client_cb.scb.peer_addr[2], bta_hf_client_cb.scb.peer_addr[3],
++                           bta_hf_client_cb.scb.peer_addr[4], bta_hf_client_cb.scb.peer_addr[5],
++                           params.packet_types, (int)params.retrans_effort, (int)params.max_latency);
++    }
++#endif
+     status = BTM_CreateSco(p_bd_addr, is_orig, params.packet_types,
+                            &bta_hf_client_cb.scb.sco_idx, bta_hf_client_sco_conn_cback,
+                            bta_hf_client_sco_disc_cback);
+@@ -521,6 +562,13 @@ static void bta_hf_client_sco_create(BOOLEAN is_orig)
+     APPL_TRACE_API("%s: orig %d, inx 0x%04x, status 0x%x, pkt types 0x%04x",
+                    __FUNCTION__, is_orig, bta_hf_client_cb.scb.sco_idx,
+                    status, params.packet_types);
++
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    if (is_orig) {
++        APPL_TRACE_WARNING("VB_HF: BTM_CreateSco(orig=1) -> status 0x%x (BTM_CMD_STARTED=0x%x means the HCI Setup Synchronous Connection command was issued; anything else is a local refusal)",
++                           (unsigned)status, (unsigned)BTM_CMD_STARTED);
++    }
++#endif
+ }
+ 
+ 
+@@ -804,7 +852,15 @@ void bta_hf_client_sco_listen(tBTA_HF_CLIENT_DATA *p_data)
+     UNUSED(p_data);
+ 
+     APPL_TRACE_DEBUG("%s", __FUNCTION__);
+-
++#ifdef VB_HF_NO_LISTEN_ARM
++    /* 0.6.10 experiment: do not arm the listen at SLC. A listen is a host-side
++     * registration only (BTM_CreateSco(is_orig=FALSE) just sets SCO_ST_LISTENING and
++     * sends no HCI command), so it cannot itself occupy a controller SCO slot. Skipping
++     * it tests that claim directly - at the cost that an AG-initiated eSCO now finds no
++     * LISTENING entry in btm_sco_conn_req() and gets rejected. */
++    APPL_TRACE_WARNING("VB_HF: listen NOT armed (VB_HF_NO_LISTEN_ARM) - incoming eSCO requests will be rejected");
++    return;
++#endif
+     bta_hf_client_sco_event(BTA_HF_CLIENT_SCO_LISTEN_E);
+ }
+ 

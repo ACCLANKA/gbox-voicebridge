@@ -1,0 +1,22 @@
+diff --git a/components/bt/host/bluedroid/btc/profile/std/hf_client/bta_hf_client_co.c b/components/bt/host/bluedroid/btc/profile/std/hf_client/bta_hf_client_co.c
+index 555e7137..8467e7ce 100644
+--- a/components/bt/host/bluedroid/btc/profile/std/hf_client/bta_hf_client_co.c
++++ b/components/bt/host/bluedroid/btc/profile/std/hf_client/bta_hf_client_co.c
+@@ -456,6 +456,17 @@ void bta_hf_client_sco_co_in_data(BT_HDR  *p_buf, tBTM_SCO_DATA_FLAG status)
+     STREAM_SKIP_UINT16(p);
+     STREAM_TO_UINT8 (pkt_size, p);
+ 
++    /* VB: the controller can start delivering SCO data before the BTA task has run
++     * bta_hf_client_sco_co_open() (the only thing that sets hf_air_mode). Those first
++     * frames used to fall into the error branch below and be dropped, flooding
++     * "invaild air mode: 255" and losing the start of the caller's audio. Both of our
++     * builds force CVSD and the accepted eSCO link reports air_mode 2 (CVSD), so assume
++     * CVSD until co_open() runs and corrects it. */
++    if (hf_air_mode == BTM_SCO_AIR_MODE_UNKNOWN) {
++        hf_air_mode = BTM_SCO_AIR_MODE_CVSD;
++        APPL_TRACE_WARNING("VB_HF: inbound SCO before air mode was known -> assuming CVSD");
++    }
++
+     if (hf_air_mode == BTM_SCO_AIR_MODE_CVSD) {
+         // CVSD
+         if(status != BTM_SCO_DATA_CORRECT){

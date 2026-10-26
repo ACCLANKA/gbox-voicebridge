@@ -1,0 +1,133 @@
+diff --git a/components/bt/host/bluedroid/stack/btm/btm_sco.c b/components/bt/host/bluedroid/stack/btm/btm_sco.c
+index 53a9768a..e409fd04 100644
+--- a/components/bt/host/bluedroid/stack/btm/btm_sco.c
++++ b/components/bt/host/bluedroid/stack/btm/btm_sco.c
+@@ -151,6 +151,13 @@ static void btm_esco_conn_rsp (UINT16 sco_inx, UINT8 hci_status, BD_ADDR bda,
+         p_sco = &btm_cb.sco_cb.sco_db[sco_inx];
+     }
+ 
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    BTM_TRACE_WARNING("VB_HF: btm_esco_conn_rsp idx=%u hci_status=0x%02x bda=%02x:%02x:%02x:%02x:%02x:%02x -> %s",
++                      (unsigned)sco_inx, hci_status,
++                      bda[0], bda[1], bda[2], bda[3], bda[4], bda[5],
++                      (hci_status != HCI_SUCCESS || p_sco == NULL) ? "REJECT (we send 0x042a)" : "ACCEPT (we send 0x0429)");
++#endif
++
+     /* Reject the connect request if refused by caller or wrong state */
+     if (hci_status != HCI_SUCCESS || p_sco == NULL) {
+         if (p_sco) {
+@@ -435,6 +442,16 @@ void  btm_route_sco_data(BT_HDR *p_msg)
+     UINT8       *p = (UINT8 *)(p_msg + 1) + p_msg->offset;
+     UINT8       pkt_size = 0;
+     UINT8       pkt_status = 0;
++    /* VB: p_msg is freed on EVERY branch below (directly, or by p_data_cb), yet the
++     * trace at the end of this function used to print p_msg->len - a read of freed
++     * memory. It normally still showed the true length (~123) because the chunk had not
++     * been recycled yet, but under allocation pressure the chunk is reused immediately
++     * and it printed garbage (16383/16382 were seen), which looks exactly like a corrupt
++     * packet length right before an allocation fails. It is a symptom of churn, not a
++     * cause: this value never feeds any allocation (host_recv_pkt_cb sizes its buffer
++     * from the HCI transport length, before this function runs). Capture it up front so
++     * the line is trustworthy. */
++    UINT16      pkt_len = p_msg->len;
+ 
+     /* Extract Packet_Status_Flag and handle */
+     STREAM_TO_UINT16 (handle, p);
+@@ -456,7 +473,7 @@ void  btm_route_sco_data(BT_HDR *p_msg)
+     } else { /* no mapping handle SCO connection is active, free the buffer */
+         osi_free (p_msg);
+     }
+-    BTM_TRACE_DEBUG ("SCO: hdl %x, len %d, pkt_sz %d\n", handle, p_msg->len, pkt_size);
++    BTM_TRACE_DEBUG ("SCO: hdl %x, len %d, pkt_sz %d\n", handle, pkt_len, pkt_size);
+ #else
+     osi_free(p_msg);
+ #endif
+@@ -618,6 +635,9 @@ static tBTM_STATUS btm_send_connect_request(UINT16 acl_handle,
+                       p_setup->max_latency, p_setup->voice_contfmt,
+                       p_setup->retrans_effort, temp_pkt_types);
+ 
++        BTM_TRACE_WARNING("VB_HF: issuing HCI_SETUP_SYNC_CONN acl=0x%04x txbw=0x%x rxbw=0x%x lat=0x%x voice=0x%x retrans=0x%02x pkt=0x%04x",
++                          acl_handle, p_setup->tx_bw, p_setup->rx_bw, p_setup->max_latency,
++                          p_setup->voice_contfmt, p_setup->retrans_effort, temp_pkt_types);
+         if (!btsnd_hcic_setup_esco_conn(acl_handle,
+                                         p_setup->tx_bw,
+                                         p_setup->rx_bw,
+@@ -625,6 +645,7 @@ static tBTM_STATUS btm_send_connect_request(UINT16 acl_handle,
+                                         p_setup->voice_contfmt,
+                                         p_setup->retrans_effort,
+                                         temp_pkt_types)) {
++            BTM_TRACE_ERROR("VB_HF: HCI_SETUP_SYNC_CONN refused locally (BTM_NO_RESOURCES)");
+             return (BTM_NO_RESOURCES);
+         } else {
+             p_setup->packet_types = temp_pkt_types;
+@@ -1034,7 +1055,30 @@ void btm_sco_connected (UINT8 hci_status, BD_ADDR bda, UINT16 hci_handle,
+ 
+     btm_cb.sco_cb.sco_disc_reason = hci_status;
+     BTM_TRACE_API("%s, handle %x", __FUNCTION__, hci_handle);
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    BTM_TRACE_WARNING("VB_HF: btm_sco_connected hci_status=0x%02x handle=0x%04x -> %s",
++                      hci_status, hci_handle,
++                      (hci_status == HCI_SUCCESS) ? "SUCCESS, link up" : "FAILURE, will discard");
++#endif
+ #if (BTM_MAX_SCO_LINKS>0)
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    /* What does our host think exists at the instant the completion/failure arrives?
++     * This is the direct answer to "was there already an (e)SCO to this device?", which
++     * is what HCI_ERR_MAX_NUM_OF_SCOS (0x0A) implies. */
++    {
++        int _i;
++        tSCO_CONN *_q;
++        for (_i = 0, _q = &btm_cb.sco_cb.sco_db[0]; _i < BTM_MAX_SCO_LINKS; _i++, _q++) {
++            if (_q->state != SCO_ST_UNUSED) {
++                BTM_TRACE_WARNING("VB_HF: sco_db[%d] state=%d handle=0x%04x is_orig=%d bda=%02x:%02x:%02x:%02x:%02x:%02x",
++                                  _i, _q->state, _q->hci_handle, _q->is_orig,
++                                  _q->esco.data.bd_addr[0], _q->esco.data.bd_addr[1],
++                                  _q->esco.data.bd_addr[2], _q->esco.data.bd_addr[3],
++                                  _q->esco.data.bd_addr[4], _q->esco.data.bd_addr[5]);
++            }
++        }
++    }
++#endif
+     for (xx = 0; xx < BTM_MAX_SCO_LINKS; xx++, p++) {
+         if (((p->state == SCO_ST_CONNECTING) ||
+                 (p->state == SCO_ST_LISTENING)  ||
+@@ -1051,6 +1095,10 @@ void btm_sco_connected (UINT8 hci_status, BD_ADDR bda, UINT16 hci_handle,
+                     }
+                     /* avoid calling disconnect callback because of sco creation race */
+                     else if (hci_status != HCI_ERR_LMP_ERR_TRANS_COLLISION) {
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++                        BTM_TRACE_ERROR("VB_HF: originate FAILED, hci_status=0x%02x -> state UNUSED, disc cb (this is the teardown; nothing in our HF code asked for it)",
++                                        hci_status);
++#endif
+                         p->state = SCO_ST_UNUSED;
+                         (*p->p_disc_cb)(xx);
+                     }
+@@ -1148,6 +1196,17 @@ tBTM_STATUS BTM_RemoveSco (UINT16 sco_inx)
+         return (BTM_UNKNOWN_ADDR);
+     }
+ 
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    /* A LISTEN entry has no HCI handle, so this path is a pure host-side unregister:
++     * no HCI command is sent, so there is nothing at the controller to "complete".
++     * That is why the remove->create gap cannot explain HCI_ERR_MAX_NUM_OF_SCOS. */
++    BTM_TRACE_WARNING("VB_HF: BTM_RemoveSco idx=%u state=%d handle=0x%04x -> %s",
++                      (unsigned)sco_inx, p->state, p->hci_handle,
++                      (p->hci_handle == BTM_INVALID_HCI_HANDLE)
++                      ? "host-side listen unregister, NO HCI command issued"
++                      : "real link, HCI Disconnect sent");
++#endif
++
+     /* If no HCI handle, simply drop the connection and return */
+     if (p->hci_handle == BTM_INVALID_HCI_HANDLE || p->state == SCO_ST_PEND_UNPARK) {
+         p->hci_handle = BTM_INVALID_HCI_HANDLE;
+@@ -1211,6 +1270,10 @@ void btm_sco_removed (UINT16 hci_handle, UINT8 reason)
+ #endif
+ 
+     btm_cb.sco_cb.sco_disc_reason = reason;
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++    BTM_TRACE_WARNING("VB_HF: btm_sco_removed handle=0x%04x reason=0x%02x (0x13=peer user, 0x16=local host, 0x08=timeout, 0x0f=unacceptable params)",
++                      hci_handle, reason);
++#endif
+ 
+ #if (BTM_MAX_SCO_LINKS>0)
+     p = &btm_cb.sco_cb.sco_db[0];

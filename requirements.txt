@@ -1,0 +1,10 @@
+# Runtime dependencies for the Voice Bridge control plane.
+fastapi>=0.110,<1.0
+uvicorn>=0.29
+# WebSocket implementation for uvicorn. Without it uvicorn logs
+# "No supported WebSocket library detected" and every /v1/device/ws upgrade
+# fails with HTTP 404 — the whole device edge is dead on a clean deploy.
+websockets>=12
+pydantic>=2.5
+# Media plane: SRTP (AES-CM) key derivation + protection (RFC 3711). Used by api/services/rtp.py.
+cryptography>=42

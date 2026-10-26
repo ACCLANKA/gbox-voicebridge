@@ -1,0 +1,32 @@
+diff --git a/components/bt/host/bluedroid/btc/profile/std/hf_client/btc_hf_client.c b/components/bt/host/bluedroid/btc/profile/std/hf_client/btc_hf_client.c
+index 67973bc2..035c41c7 100644
+--- a/components/bt/host/bluedroid/btc/profile/std/hf_client/btc_hf_client.c
++++ b/components/bt/host/bluedroid/btc/profile/std/hf_client/btc_hf_client.c
+@@ -274,6 +274,19 @@ bt_status_t btc_hf_client_connect_audio( bt_bdaddr_t *bd_addr )
+ 
+     if (is_connected(bd_addr))
+     {
++#ifdef VB_HF_FORCE_SCO_ORIGINATE
++        /* This branch keys on the PEER's AG codec-negotiation bit (0x200), NOT on our
++         * own BTA_HF_CLIENT_FEAT_CODEC (0x80) - so clearing our BRSF bit cannot move it.
++         * Every AG we have tested sets 0x200 (the phone sent +BRSF=4079=0x0fef), so we
++         * always took the AT+BCC path and waited for the AG to open audio; it replies
++         * +BCS:1/OK and then never does. Force the legacy route instead:
++         * BTA_HfClientAudioOpen -> BTA_HF_CLIENT_SCO_OPEN_E -> bta_hf_client_sco_create(TRUE)
++         * from LISTEN_ST, i.e. WE send HCI Setup Synchronous Connection. */
++        LOG_WARN("VB_HF: connect_audio FORCING originate (peer_feat=0x%04x peer_codec=%d) - AT+BCC suppressed",
++                 hf_client_local_param.btc_hf_client_cb.peer_feat,
++                 (hf_client_local_param.btc_hf_client_cb.peer_feat & BTA_HF_CLIENT_PEER_CODEC) ? 1 : 0);
++        BTA_HfClientAudioOpen(hf_client_local_param.btc_hf_client_cb.handle);
++#else
+         if (hf_client_local_param.btc_hf_client_cb.peer_feat & BTA_HF_CLIENT_PEER_CODEC)
+         {
+             BTA_HfClientSendAT(hf_client_local_param.btc_hf_client_cb.handle, BTA_HF_CLIENT_AT_CMD_BCC, 0, 0, NULL);
+@@ -282,6 +295,7 @@ bt_status_t btc_hf_client_connect_audio( bt_bdaddr_t *bd_addr )
+         {
+             BTA_HfClientAudioOpen(hf_client_local_param.btc_hf_client_cb.handle);
+         }
++#endif
+ 
+         /* Inform the application that the audio connection has been initiated successfully */
+         do {

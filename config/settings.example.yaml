@@ -1,0 +1,17 @@
+# Example application configuration.
+# Copy to settings.yaml and adjust for your environment.
+
+app:
+  name: my-project
+  env: development
+  log_level: debug
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+database:
+  host: localhost
+  port: 5432
+  name: mydb
+  user: myuser

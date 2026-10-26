@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Voice Bridge - Control Panel</title>
+<link rel="stylesheet" href="/web/app.css" />
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="logo">VB</span> Voice Bridge</div>
+    <nav>
+      <a data-view="overview" class="active">Overview</a>
+      <a data-view="devices">Devices</a>
+      <a data-view="wifi">Wi-Fi &amp; Provisioning</a>
+      <a data-view="monitor">Connection Monitor</a>
+      <a data-view="calls">Calls</a>
+      <a data-view="numbers">Numbers (DIDs)</a>
+      <a data-view="settings">Device ID Settings</a>
+      <a data-view="help">Help &amp; Docs</a>
+      <a data-view="api">API</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div id="live-dot" class="dot"></div> <span id="live-label">connecting...</span>
+      <button id="reset-demo" class="ghost tiny">Reset demo data</button>
+      <button id="sign-out" class="ghost tiny">Sign out</button>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <h1 id="view-title">Overview</h1>
+      <div class="tenant" id="tenant-line"></div>
+    </header>
+
+    <section id="view-overview" class="view active"></section>
+    <section id="view-devices" class="view"></section>
+    <section id="view-wifi" class="view"></section>
+    <section id="view-monitor" class="view"></section>
+    <section id="view-calls" class="view"></section>
+    <section id="view-numbers" class="view"></section>
+    <section id="view-settings" class="view"></section>
+    <section id="view-help" class="view"></section>
+    <section id="view-api" class="view"></section>
+  </main>
+</div>
+
+<div id="toast" class="toast"></div>
+<script src="/web/app.js"></script>
+</body>
+</html>

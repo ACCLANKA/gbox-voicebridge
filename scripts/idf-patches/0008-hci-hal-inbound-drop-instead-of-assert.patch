@@ -1,0 +1,18 @@
+diff --git a/components/bt/host/bluedroid/hci/hci_hal_h4.c b/components/bt/host/bluedroid/hci/hci_hal_h4.c
+index 9663126a..57d44329 100644
+--- a/components/bt/host/bluedroid/hci/hci_hal_h4.c
++++ b/components/bt/host/bluedroid/hci/hci_hal_h4.c
+@@ -581,7 +581,12 @@ static int host_recv_pkt_cb(uint8_t *data, uint16_t len)
+         pkt = (BT_HDR *) osi_calloc(pkt_size);
+         if (!pkt) {
+             HCI_TRACE_ERROR("%s couldn't acquire memory for inbound data buffer.\n", __func__);
+-            assert(0);
++            /* VB: do NOT assert. Upstream asserts here, which reboots the board mid-call
++             * (rst:0xc) and drops the Bluetooth link with it. Dropping one inbound packet
++             * is an audible glitch; a reset is a lost call. The caller treats a non-zero
++             * return as "packet not taken", which is the documented behaviour for the
++             * advertisement-report branch below. */
++            return 0;
+         }
+ 
+         pkt->offset = 0;

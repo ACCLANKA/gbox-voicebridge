@@ -1,0 +1,27 @@
+# secrets and local state — never commit
+.env
+.env.*
+!.env.example
+*.db
+*.db-wal
+*.db-shm
+data/
+convenv/
+sttenv/
+models/
+
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# misc
+*.log
+build/
+dist/
+
+# editor/agent backups
+*.bak
+*.bak-*
+*.orig

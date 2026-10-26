@@ -1,0 +1,35 @@
+diff --git a/components/tcp_transport/transport_ws.c b/components/tcp_transport/transport_ws.c
+index 529494ca..9eaa1c1e 100644
+--- a/components/tcp_transport/transport_ws.c
++++ b/components/tcp_transport/transport_ws.c
+@@ -353,9 +353,28 @@ static int _ws_write(esp_transport_handle_t t, int opcode, int mask_flag, const
+     char *mask;
+     int header_len = 0, i;
+ 
++    /* poll_write returns 0 when select() timed out: the socket was not writable within
++     * the timeout. Under Wi-Fi/BT coexistence pressure that is normal, not fatal - but
++     * returning 0 here propagated all the way up as "esp_transport_write() returned 0",
++     * which the websocket client treats as a dead transport and tears the whole session
++     * down (losing the call's audio and its events). Nothing has been written at this
++     * point, so retrying the poll is safe; retry in short slices until the caller's own
++     * budget is spent, so a genuinely dead link still fails in bounded time. */
+     int poll_write;
+-    if ((poll_write = esp_transport_poll_write(ws->parent, timeout_ms)) <= 0) {
+-        ESP_LOGE(TAG, "Error transport_poll_write");
++    int poll_budget_ms = timeout_ms;
++    while ((poll_write = esp_transport_poll_write(ws->parent,
++                                                  poll_budget_ms > 50 ? 50 : poll_budget_ms)) == 0) {
++        if (poll_budget_ms <= 0) {
++            break;      /* portMAX_DELAY / no budget: no room to slice, keep it simple */
++        }
++        poll_budget_ms -= 50;
++        if (poll_budget_ms <= 0) {
++            break;
++        }
++    }
++    if (poll_write <= 0) {
++        ESP_LOGE(TAG, "Error transport_poll_write (%d, budget %d ms left)",
++                 poll_write, poll_budget_ms);
+         return poll_write;
+     }
+     ws_header[header_len++] = opcode;
