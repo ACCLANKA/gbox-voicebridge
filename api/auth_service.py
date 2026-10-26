@@ -339,6 +339,28 @@ def send_reset(email: str, token: str) -> str:
 from fastapi import APIRouter, FastAPI, Request, Response, HTTPException
 from pydantic import BaseModel, Field
 
+_SCHEMA_READY = False
+
+
+def _ensure_schema() -> None:
+    """Run migrate() once per process before any write.
+
+    The app carries two `users` schemas: api/db.py creates the table without `status`,
+    while this module inserts it. migrate() adds missing columns, but it used to run only
+    from a CLI entry point, so a fresh database failed signup with
+    "table users has no column named status". Doing it lazily here removes the dependency
+    on a startup hook firing.
+    """
+    global _SCHEMA_READY
+    if _SCHEMA_READY:
+        return
+    try:
+        migrate(db_path())
+        _SCHEMA_READY = True
+    except Exception as exc:  # noqa: BLE001
+        print("auth schema ensure failed:", type(exc).__name__, str(exc)[:120])
+
+
 router = APIRouter(prefix="/v1/ui", tags=["auth"])
 
 
@@ -384,6 +406,7 @@ def _ip(req: Request) -> str:
 
 @router.post("/signup", status_code=201)
 def signup(body: SignupIn, req: Request, resp: Response):
+    _ensure_schema()
     email = norm_email(body.email)
     if not EMAIL_RE.match(email):
         raise HTTPException(422, "that does not look like an email address")
@@ -484,6 +507,7 @@ def me(req: Request):
 @router.post("/forgot")
 def forgot(body: ForgotIn, req: Request):
     """Always 200 - whether or not the address exists. No enumeration."""
+    _ensure_schema()
     email = norm_email(body.email)
     if not rate_ok("forgot:" + _ip(req), 5, 3600) or not rate_ok("forgot:" + email, 3, 3600):
         return {"ok": True}
