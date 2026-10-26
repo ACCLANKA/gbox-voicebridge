@@ -394,7 +394,8 @@ def _developer_openapi() -> dict:
             "`X-GBox-Signature: t=<unix>,v1=<hmac-sha256 of \"<t>.<body>\">`."
         ),
         routes=app.routes,
-        servers=[{"url": "https://vb.site.gigies.lk", "description": "Production"},
+        servers=[{"url": "https://api.gigies.lk", "description": "Production (Railway)"},
+                 {"url": "https://vb.site.gigies.lk", "description": "Production (VPS)"},
                  {"url": "http://127.0.0.1:8080", "description": "Local container"}],
         contact={"name": "GBox by Gigies (Pvt) Ltd", "url": "https://gigies.lk",
                  "email": "info@gigies.lk"},

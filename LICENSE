@@ -1,0 +1,25 @@
+GBox Voice Bridge — Source-available, proprietary
+
+Copyright (c) 2026 Gigies (Pvt) Ltd. All rights reserved.
+
+This repository is published for reference and evaluation. It is NOT open source.
+
+You may:
+  - read, study and discuss the code;
+  - run it locally to evaluate the platform.
+
+You may not:
+  - use it, in whole or in part, to provide a commercial service;
+  - redistribute it, or derivative works of it, in source or binary form;
+  - remove or alter this notice or any authorship notice.
+
+No licence, express or implied, is granted for any other purpose. Written permission is
+required: info@gigies.lk
+
+The software is provided "as is", without warranty of any kind, express or implied,
+including but not limited to the warranties of merchantability, fitness for a particular
+purpose and non-infringement. In no event shall the authors or copyright holders be liable
+for any claim, damages or other liability arising from, out of or in connection with the
+software or its use.
+
+Third-party components keep their own licences; see requirements.txt.
