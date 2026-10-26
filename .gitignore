@@ -25,3 +25,8 @@ dist/
 *.bak
 *.bak-*
 *.orig
+
+# firmware credentials and Wi-Fi credentials - never commit
+firmware/**/secrets.h
+firmware/**/nvs-*.bin
+*.bin.tmp
