@@ -41,7 +41,7 @@ Required environment (all optional at import time, features degrade without them
 | `DEEPSEEK_API_KEY` / `LLM_API_KEY` | the reply model |
 | `STT_URL` | Whisper service, `POST /transcribe` with raw PCM16 |
 | `TTS_URLS` | speech synthesis container, `{"text": ...}` → WAV |
-| `GBOX_DB_PATH` | SQLite location (default `/app/data/voicebridge.db`) |
+| `VB_DB` | SQLite path (default `/app/data/voicebridge.db`); `GBOX_DB` is also honoured by the auth layer |
 | `GBOX_SMTP_*` | password reset and verification mail |
 | `TOY_KEY` | shared key for the toy endpoints |
 

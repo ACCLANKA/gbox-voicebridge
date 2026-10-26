@@ -41,6 +41,7 @@ from .routers import ops as ops_router
 from .routers import tenants as tenants_router
 from .routers import ui as ui_router
 from .auth_service import router as gbox_auth_router
+from . import auth_service as gbox_auth
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
@@ -219,6 +220,14 @@ def _startup() -> None:
     # `store` is api.db (imported as `store`): its init() runs the schema,
     # the column upgrades and the baseline seed - so migrations do run on boot.
     store.init()
+    # The gbox_* auth tables (sessions, reset requests, auth events) were only created by
+    # the CLI migrate path, so a FRESH database made signup and password reset return 500
+    # ("no such table: gbox_sessions") even though login worked. Migrate on every boot;
+    # migrate() only adds, never drops.
+    try:
+        gbox_auth.migrate(gbox_auth.db_path())
+    except Exception as exc:  # noqa: BLE001 - never block startup over this
+        print("auth migrate failed:", type(exc).__name__, str(exc)[:120])
     ui_router._load_help()
 
 
